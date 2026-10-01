@@ -19,3 +19,8 @@ This is primarily a teaching exercise for me, so I want to understand every piec
 6. Let the user test the results, waiting for okay to proceed
 7. Interview the user for feedback
 8. Document in this document (CLAUDE.md) and in NOTES.md
+
+## Rules
+
+- Ensure you give me a list of all files you changed
+- Do not push or commit to git
