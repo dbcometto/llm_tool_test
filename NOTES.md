@@ -1,6 +1,41 @@
 # Notes
 
+## Status: 1 Oct 26 / Stage 1-2 done (chat + agentic loop + toy tools)
 
+### Files
+- `main.py`: UI. Chat loop, `/think` and `/quit`, `render()` (the only place that prints), model warm-up with error handling.
+- `agent.py`: no printing. `stream_reply()` = one model call; `run_agent_turn()` = the agentic loop. Reports everything through `emit(kind, data)` callback.
+- `tools.py`: tool functions + schemas (`TOOLS`) + `REGISTRY` + `run_tool()`.
+- `config.py`: model, `NUM_CTX`, `THINK`, `TEMPERATURE`, `MAX_ITERATIONS`, `KEEP_ALIVE`, system prompt.
+
+### Concepts
+- Two loops: chat loop (once per user message, in main.py) vs agentic loop (once per model call, in agent.py). Model stops looping by making no tool calls; `MAX_ITERATIONS` is the backstop.
+- The model only emits tokens. Tool calls are generated text; Ollama's `RENDERER`/`PARSER qwen3.5` (see `ollama show --modelfile`) build the prompt and split the output into `thinking` / `content` / `tool_calls`.
+- Roles: `system`, `user`, `assistant`, `tool` (industry convention, not Ollama-specific). Tool result = `{"role": "tool", "tool_name": ..., "content": ...}`.
+- Streaming: `stream=True` returns a generator; `print(..., end="", flush=True)` makes it appear live.
+- A tool = function (we run it) + schema (the only thing the model sees). Description wording drives when it gets called.
+- Errors are returned to the model as tool-result text, never raised.
+- History is the model's only memory and is resent every call, so it grows (context + speed cost).
+
+### Decisions
+- Turn-based loop. Considered "agent calls a wait-for-user tool"; deferred (small model might never yield). Possible hybrid later: implicit wait + optional `ask_user`.
+- Ctrl+C mid-reply keeps the partial text, tagged ` [interrupted by user]`; any tool calls in the cut-off reply are dropped, not run.
+- Warm-up request at startup (`num_predict: 1`). `OPTIONS` must be identical in warm-up and real calls or Ollama reloads the model. `keep_alive` 30m (default unloads after 5m).
+- `temperature` 0.5 (model default is 1) for steadier tool calls.
+- Docker/sandboxing deferred until file tools exist.
+
+### Tools (tabletop theme)
+`get_current_time`, `add`, `multiply`, `divide`, `roll_dice`, `random_number`, `change_counter`, `get_counter`, `remember`, `recall`. Counters and memory are in-process dicts (lost on exit).
+
+### Things to watch / test
+- Does the model send numbers as strings? (`"2" + "3"` would silently give `"23"`.)
+- Tool choice with 10 tools; chaining (roll then add); remember then recall across turns.
+- Ten schemas eat context on every call.
+- Still missing: JSONL event log, error handling around chat calls in the main loop (only warm-up is guarded), handling Ctrl+C during a slow tool.
+- `requirements.txt` is UTF-16 (PowerShell `>`); regenerate with `Out-File -Encoding utf8` if pip complains.
+
+### Next
+Run the experiments above, give feedback, then document in CLAUDE.md; later: file tools with path sandboxing, the librarian itself.
 
 
 
@@ -94,3 +129,7 @@ PS C:\Users\benja> ollama ps
 NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL
 qwen3.5:4b    2a654d98e6fb    3.1 GB    100% CPU     4096       3 minutes from now
 ```
+
+Takeaways: CPU only, ~7 tok/s. Thinking is the main cost (~700 tokens to say hi, 1m44s). Default context is 4096 (Ollama truncates silently).
+
+

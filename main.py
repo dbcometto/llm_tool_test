@@ -4,7 +4,7 @@ import sys
 import ollama
 
 import config
-from agent import stream_reply, warm_up
+from agent import run_agent_turn, warm_up
 
 
 
@@ -19,14 +19,23 @@ RESET = "\033[0m"  # back to normal text
 # Print token callback
 def render(kind, data):
     """Decide how each event from the agent looks on screen."""
-    if kind == "thinking":
+    if kind == "loop":  # a model call starts: label it, then the reply streams in after it
+        print(f"\n{DIM}[loop {data['iteration']}/{data['max']}]{RESET}")
+        print("Assistant> ", end="", flush=True)
+    elif kind == "thinking":
         print(f"{DIM}{data}{RESET}", end="", flush=True)
     elif kind == "content":
         print(data, end="", flush=True)
     elif kind == "stats":
-        print(f"\n{DIM}[{data['tokens']} tokens, {data['rate']:.1f} tok/s]{RESET}", end="")
+        print(f"\n{DIM}[{data['tokens']} tokens, {data['rate']:.1f} tok/s]{RESET}")
     elif kind == "interrupted":
-        print(f"\n{DIM}[interrupted]{RESET}", end="")
+        print(f"\n{DIM}[interrupted]{RESET}")
+    elif kind == "tool_call":
+        print(f"{DIM}[tool call] {data['name']}({data['arguments']}){RESET}")
+    elif kind == "tool_result":
+        print(f"{DIM}[tool result] {data['result']}{RESET}")
+    elif kind == "limit":
+        print(f"{DIM}[stopped: reached the maximum of {config.MAX_ITERATIONS} loops]{RESET}")
 
 
 # Main loop
@@ -72,13 +81,7 @@ def main():
 
         # Interact with model
         messages.append({"role": "user", "content": user_text})
-        print("\nAssistant> ", end="", flush=True)
-
-        reply = stream_reply(messages, think, render)
-        print()  # end the output line
-
-        if reply["content"]:
-            messages.append(reply)
+        run_agent_turn(messages, think, render)  # runs the agentic loop; appends to messages
 
 
 if __name__ == "__main__":
